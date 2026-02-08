@@ -1,0 +1,463 @@
+import express from "express"
+import jwt from "jsonwebtoken"
+import bcrypt from "bcrypt"
+import { z } from "zod"
+import { Admin } from "../models/Admin.js"
+import { Contact } from "../models/Contact.js"
+import { Service } from "../models/Service.js"
+import { Project } from "../models/Project.js"
+import { ServiceCategory } from "../models/ServiceCategory.js"
+import { ChatLead } from "../models/ChatLead.js"
+import { Order } from "../models/Order.js"
+import { TrendingProduct } from "../models/TrendingProduct.js"
+import { requireAuth } from "../middleware/auth.js"
+
+const router = express.Router()
+
+const loginSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(6).max(200),
+})
+
+const serviceSchema = z.object({
+  title: z.string().min(2).max(140),
+  description: z.string().min(10).max(1000),
+  includes: z.array(z.string().min(2).max(140)).optional().default([]),
+  idealFor: z.string().max(200).optional().or(z.literal("")),
+  visible: z.boolean().optional().default(true),
+  featured: z.boolean().optional().default(false),
+  categoryId: z.string().optional().or(z.literal("")),
+})
+
+const projectSchema = z.object({
+  name: z.string().min(2).max(140),
+  description: z.string().min(10).max(1000),
+  link: z.string().url().optional().or(z.literal("")),
+  industry: z.string().max(120).optional().or(z.literal("")),
+  outcome: z.string().max(240).optional().or(z.literal("")),
+  stack: z.array(z.string().min(2).max(80)).optional().default([]),
+  featured: z.boolean().optional().default(false),
+})
+
+router.post("/admin/login", async (req, res, next) => {
+  try {
+    const payload = loginSchema.parse(req.body)
+    const admin = await Admin.findOne({ email: payload.email.toLowerCase() })
+    if (!admin) {
+      return res.status(401).json({ message: "Invalid credentials" })
+    }
+    const valid = await bcrypt.compare(payload.password, admin.passwordHash)
+    if (!valid) {
+      return res.status(401).json({ message: "Invalid credentials" })
+    }
+    const token = jwt.sign(
+      { adminId: admin._id, email: admin.email },
+      process.env.JWT_SECRET,
+      { expiresIn: "7d" }
+    )
+    res.json({ token })
+  } catch (error) {
+    if (error?.issues) {
+      return res.status(400).json({ message: "Invalid input" })
+    }
+    next(error)
+  }
+})
+
+router.get("/admin/contacts", requireAuth, async (req, res, next) => {
+  try {
+    const contacts = await Contact.find({}).sort({ createdAt: -1 })
+    res.json(contacts)
+  } catch (error) {
+    next(error)
+  }
+})
+
+router.get("/admin/chat-leads", requireAuth, async (req, res, next) => {
+  try {
+    const leads = await ChatLead.find({}).sort({ createdAt: -1 })
+    res.json(leads)
+  } catch (error) {
+    next(error)
+  }
+})
+
+router.delete("/admin/chat-leads/:id", requireAuth, async (req, res, next) => {
+  try {
+    const lead = await ChatLead.findByIdAndDelete(req.params.id)
+    if (!lead) {
+      return res.status(404).json({ message: "Not found" })
+    }
+    res.status(204).send()
+  } catch (error) {
+    next(error)
+  }
+})
+
+router.get("/admin/orders", requireAuth, async (req, res, next) => {
+  try {
+    const orders = await Order.find({}).sort({ createdAt: -1 })
+    res.json(orders)
+  } catch (error) {
+    next(error)
+  }
+})
+
+router.patch("/admin/orders/:id", requireAuth, async (req, res, next) => {
+  try {
+    const payload = z
+      .object({
+        status: z
+          .enum(["pending_payment", "paid", "in_progress", "delivered", "cancelled"])
+          .optional(),
+        notes: z.string().max(2000).optional().or(z.literal("")),
+      })
+      .parse(req.body)
+    const order = await Order.findByIdAndUpdate(
+      req.params.id,
+      {
+        status: payload.status,
+        notes: payload.notes,
+      },
+      { new: true }
+    )
+    if (!order) {
+      return res.status(404).json({ message: "Not found" })
+    }
+    res.json(order)
+  } catch (error) {
+    if (error?.issues) {
+      return res.status(400).json({ message: "Invalid input" })
+    }
+    next(error)
+  }
+})
+
+router.get("/admin/trending", requireAuth, async (req, res, next) => {
+  try {
+    const products = await TrendingProduct.find({}).sort({ createdAt: -1 })
+    res.json(products)
+  } catch (error) {
+    next(error)
+  }
+})
+
+router.post("/admin/trending", requireAuth, async (req, res, next) => {
+  try {
+    const payload = z
+      .object({
+        title: z.string().min(2).max(140),
+        price: z.number().int().positive(),
+        description: z.string().min(10).max(1000),
+        imageUrl: z.string().url().optional().or(z.literal("")),
+        details: z.array(z.string().min(2).max(140)).optional().default([]),
+        active: z.boolean().optional().default(true),
+      })
+      .parse(req.body)
+    const product = await TrendingProduct.create({
+      title: payload.title,
+      price: payload.price,
+      description: payload.description,
+      imageUrl: payload.imageUrl || "",
+      details: payload.details || [],
+      active: payload.active ?? true,
+    })
+    res.status(201).json(product)
+  } catch (error) {
+    if (error?.issues) {
+      return res.status(400).json({ message: "Invalid input" })
+    }
+    next(error)
+  }
+})
+
+router.put("/admin/trending/:id", requireAuth, async (req, res, next) => {
+  try {
+    const payload = z
+      .object({
+        title: z.string().min(2).max(140),
+        price: z.number().int().positive(),
+        description: z.string().min(10).max(1000),
+        imageUrl: z.string().url().optional().or(z.literal("")),
+        details: z.array(z.string().min(2).max(140)).optional().default([]),
+        active: z.boolean().optional().default(true),
+      })
+      .parse(req.body)
+    const product = await TrendingProduct.findByIdAndUpdate(
+      req.params.id,
+      {
+        title: payload.title,
+        price: payload.price,
+        description: payload.description,
+        imageUrl: payload.imageUrl || "",
+        details: payload.details || [],
+        active: payload.active ?? true,
+      },
+      { new: true }
+    )
+    if (!product) {
+      return res.status(404).json({ message: "Not found" })
+    }
+    res.json(product)
+  } catch (error) {
+    if (error?.issues) {
+      return res.status(400).json({ message: "Invalid input" })
+    }
+    next(error)
+  }
+})
+
+router.delete("/admin/trending/:id", requireAuth, async (req, res, next) => {
+  try {
+    const product = await TrendingProduct.findByIdAndDelete(req.params.id)
+    if (!product) {
+      return res.status(404).json({ message: "Not found" })
+    }
+    res.status(204).send()
+  } catch (error) {
+    next(error)
+  }
+})
+
+router.get("/admin/services", requireAuth, async (req, res, next) => {
+  try {
+    const services = await Service.find({})
+      .populate("categoryId")
+      .sort({ createdAt: -1 })
+    res.json(services)
+  } catch (error) {
+    next(error)
+  }
+})
+
+router.get("/admin/categories", requireAuth, async (req, res, next) => {
+  try {
+    const categories = await ServiceCategory.find({}).sort({ title: 1 })
+    res.json(categories)
+  } catch (error) {
+    next(error)
+  }
+})
+
+router.get("/admin/projects", requireAuth, async (req, res, next) => {
+  try {
+    const projects = await Project.find({}).sort({ createdAt: -1 })
+    res.json(projects)
+  } catch (error) {
+    next(error)
+  }
+})
+
+router.patch("/admin/contacts/:id/read", requireAuth, async (req, res, next) => {
+  try {
+    const contact = await Contact.findByIdAndUpdate(
+      req.params.id,
+      { read: true },
+      { new: true }
+    )
+    if (!contact) {
+      return res.status(404).json({ message: "Not found" })
+    }
+    res.json(contact)
+  } catch (error) {
+    next(error)
+  }
+})
+
+router.delete("/admin/contacts/:id", requireAuth, async (req, res, next) => {
+  try {
+    const contact = await Contact.findByIdAndDelete(req.params.id)
+    if (!contact) {
+      return res.status(404).json({ message: "Not found" })
+    }
+    res.status(204).send()
+  } catch (error) {
+    next(error)
+  }
+})
+
+router.post("/admin/services", requireAuth, async (req, res, next) => {
+  try {
+    const payload = serviceSchema.parse(req.body)
+    const service = await Service.create({
+      title: payload.title,
+      description: payload.description,
+      includes: payload.includes,
+      idealFor: payload.idealFor || "",
+      visible: payload.visible ?? true,
+      featured: payload.featured ?? false,
+      categoryId: payload.categoryId || null,
+    })
+    res.status(201).json(service)
+  } catch (error) {
+    if (error?.issues) {
+      return res.status(400).json({ message: "Invalid input" })
+    }
+    next(error)
+  }
+})
+
+router.put("/admin/services/:id", requireAuth, async (req, res, next) => {
+  try {
+    const payload = serviceSchema.parse(req.body)
+    const service = await Service.findByIdAndUpdate(
+      req.params.id,
+      {
+        title: payload.title,
+        description: payload.description,
+        includes: payload.includes,
+        idealFor: payload.idealFor || "",
+        visible: payload.visible ?? true,
+        featured: payload.featured ?? false,
+        categoryId: payload.categoryId || null,
+      },
+      { new: true }
+    )
+    if (!service) {
+      return res.status(404).json({ message: "Not found" })
+    }
+    res.json(service)
+  } catch (error) {
+    if (error?.issues) {
+      return res.status(400).json({ message: "Invalid input" })
+    }
+    next(error)
+  }
+})
+
+router.post("/admin/categories", requireAuth, async (req, res, next) => {
+  try {
+    const payload = z
+      .object({
+        title: z.string().min(2).max(140),
+        items: z.array(z.string().min(2).max(140)).optional().default([]),
+      })
+      .parse(req.body)
+    const category = await ServiceCategory.create({
+      title: payload.title,
+      items: payload.items,
+    })
+    res.status(201).json(category)
+  } catch (error) {
+    if (error?.issues) {
+      return res.status(400).json({ message: "Invalid input" })
+    }
+    next(error)
+  }
+})
+
+router.put("/admin/categories/:id", requireAuth, async (req, res, next) => {
+  try {
+    const payload = z
+      .object({
+        title: z.string().min(2).max(140),
+        items: z.array(z.string().min(2).max(140)).optional().default([]),
+      })
+      .parse(req.body)
+    const category = await ServiceCategory.findByIdAndUpdate(
+      req.params.id,
+      { title: payload.title, items: payload.items },
+      { new: true }
+    )
+    if (!category) {
+      return res.status(404).json({ message: "Not found" })
+    }
+    res.json(category)
+  } catch (error) {
+    if (error?.issues) {
+      return res.status(400).json({ message: "Invalid input" })
+    }
+    next(error)
+  }
+})
+
+router.delete("/admin/categories/:id", requireAuth, async (req, res, next) => {
+  try {
+    const category = await ServiceCategory.findByIdAndDelete(req.params.id)
+    if (!category) {
+      return res.status(404).json({ message: "Not found" })
+    }
+    await Service.updateMany(
+      { categoryId: category._id },
+      { $set: { categoryId: null } }
+    )
+    res.status(204).send()
+  } catch (error) {
+    next(error)
+  }
+})
+
+router.post("/admin/projects", requireAuth, async (req, res, next) => {
+  try {
+    const payload = projectSchema.parse(req.body)
+    const project = await Project.create({
+      name: payload.name,
+      description: payload.description,
+      link: payload.link || "",
+      industry: payload.industry || "",
+      outcome: payload.outcome || "",
+      stack: payload.stack || [],
+      featured: payload.featured ?? false,
+    })
+    res.status(201).json(project)
+  } catch (error) {
+    if (error?.issues) {
+      return res.status(400).json({ message: "Invalid input" })
+    }
+    next(error)
+  }
+})
+
+router.put("/admin/projects/:id", requireAuth, async (req, res, next) => {
+  try {
+    const payload = projectSchema.parse(req.body)
+    const project = await Project.findByIdAndUpdate(
+      req.params.id,
+      {
+        name: payload.name,
+        description: payload.description,
+        link: payload.link || "",
+        industry: payload.industry || "",
+        outcome: payload.outcome || "",
+        stack: payload.stack || [],
+        featured: payload.featured ?? false,
+      },
+      { new: true }
+    )
+    if (!project) {
+      return res.status(404).json({ message: "Not found" })
+    }
+    res.json(project)
+  } catch (error) {
+    if (error?.issues) {
+      return res.status(400).json({ message: "Invalid input" })
+    }
+    next(error)
+  }
+})
+
+router.delete("/admin/services/:id", requireAuth, async (req, res, next) => {
+  try {
+    const service = await Service.findByIdAndDelete(req.params.id)
+    if (!service) {
+      return res.status(404).json({ message: "Not found" })
+    }
+    res.status(204).send()
+  } catch (error) {
+    next(error)
+  }
+})
+
+router.delete("/admin/projects/:id", requireAuth, async (req, res, next) => {
+  try {
+    const project = await Project.findByIdAndDelete(req.params.id)
+    if (!project) {
+      return res.status(404).json({ message: "Not found" })
+    }
+    res.status(204).send()
+  } catch (error) {
+    next(error)
+  }
+})
+
+export default router

@@ -1,0 +1,121 @@
+@import url("https://fonts.googleapis.com/css2?family=Fraunces:wght@400;600;700&family=Inter:wght@400;500;600&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color: #0e151b;
+    background-color: #f5f3ef;
+  }
+
+  body {
+    font-family: "Inter", system-ui, sans-serif;
+    @apply bg-sand text-ink antialiased;
+    overflow-x: hidden;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: "Fraunces", serif;
+  }
+
+  a {
+    @apply text-ink hover:text-moss transition-colors;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .glass-card {
+    background: #ffffff;
+    border: 1px solid rgba(229, 231, 235, 0.9);
+    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+  }
+
+  .bg-grid {
+    background-image: linear-gradient(rgba(15, 23, 42, 0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(15, 23, 42, 0.04) 1px, transparent 1px);
+    background-size: 48px 48px;
+    background-position: -8px -8px;
+  }
+
+  .section-sheen {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .section-sheen::after {
+    content: "";
+    position: absolute;
+    top: -30%;
+    right: -20%;
+    width: 50%;
+    height: 200%;
+    background: linear-gradient(
+      120deg,
+      transparent 0%,
+      rgba(15, 23, 42, 0.08) 50%,
+      transparent 100%
+    );
+    transform: rotate(8deg);
+    pointer-events: none;
+  }
+
+  .bg-solid-ink {
+    background: #0f172a;
+    color: #f5f3ef;
+  }
+
+  .team-card {
+    position: relative;
+    overflow: hidden;
+    transition: transform 200ms ease, box-shadow 200ms ease;
+  }
+
+  .team-card::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 0.75rem;
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    pointer-events: none;
+  }
+
+  .team-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 14px 32px rgba(15, 23, 42, 0.12);
+  }
+
+  .team-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    border-radius: 999px;
+    background: #f1f5f9;
+    color: #0f172a;
+    padding: 0.35rem 0.75rem;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+  }
+
+  .team-avatar {
+    display: grid;
+    place-items: center;
+    width: 52px;
+    height: 52px;
+    border-radius: 16px;
+    background: #0f172a;
+    color: #f5f3ef;
+    font-weight: 600;
+    font-size: 1rem;
+  }
+
+}
